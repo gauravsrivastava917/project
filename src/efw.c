@@ -12,6 +12,7 @@
 
 #include <linux/spinlock.h>
 #include <linux/slab.h>
+#include <linux/seq_file.h>
 
 MODULE_LICENSE("GPL v2");
 MODULE_DESCRIPTION("Embedded-Linux-Kernel-FireWall");
@@ -26,18 +27,23 @@ MODULE_AUTHOR(AUTHORS);
  */
 static struct proc_dir_entry *pfs_entry; 
 
+#define EFW_PROC_FILE_COUNT 5
 /* pfs_rule_files [N] where N:
  * ***************************
  * N = 0 : read only rules file
  * N = 1 : write only rules file
  * N = 2 : log all file
- * N = 3 : violation log file
- * N = 4 : obeyance log file
+ * N = 3 : match log file
+ * N = 4 : non_match log file
  */
-static struct proc_dir_entry *pfs_rule_files[5];
+static struct proc_dir_entry *pfs_rule_files[EFW_PROC_FILE_COUNT];
 
 /* pfs_wrt_spn_lck - write spin lock for pfs_rwe[1] */
 DEFINE_SPINLOCK(pfs_wrt_spn_lck);
+
+static char *FileNames[] = {
+  "read", "write", "log_all", "match", "non_match"
+};
 
 enum Protocols{
   PRT_INVALID  = -1,
@@ -51,8 +57,8 @@ enum InOut{
   IO_OUT       = 2,
 };
 enum Action{
-  A_BLOCK      = 0,
-  A_UNBLOCK    = 1,
+  ACT_BLOCK      = 0,
+  ACT_UNBLOCK    = 1,
 };
 /* I know that I could have left 0,1 .. out in InOut and Action, these
  * are explicit so that the rules stay visible
@@ -99,7 +105,47 @@ static struct efw_rule policy_list;
 static struct nf_hook_ops nfhops;
 static struct nf_hook_ops nfhops_out;
 
-unsigned int port_str_to_int(char *port_str) {
+/* seq_file interface */
+static void *efw_seq_start(struct seq_file *sfile, loff_t *pos){
+/* TODO: */
+  return NULL;
+}
+
+static void *efw_seq_next(struct seq_file *sfile, void *v, loff_t *pos){
+/* TODO: */
+  return NULL;
+}
+
+static void *efw_seq_stop(struct seq_file *sfile, void *v){
+/* TODO: */
+  return NULL;
+}
+
+static int efw_seq_show(struct seq_file * sfile, void *v){
+/* TODO: */
+  return 0;
+}
+
+static struct seq_operations efw_seq_ops = {
+  .start = efw_seq_start,
+  .next = efw_seq_next,
+  .stop = efw_seq_stop,
+  .show = efw_seq_show,
+};
+
+static int efw_proc_open(struct inode *inode, struct file *file){
+  return seq_open(file, &efw_seq_ops);
+}
+
+static struct file_operations efw_proc_ops = {
+  .owner = THIS_MODULE,
+  .open = efw_proc_open,
+  .read = seq_read,
+  .llseek = seq_lseek,
+  .release = seq_release,
+};
+
+static unsigned int port_str_to_int(char *port_str) {
 	unsigned int port = 0;    
 	int i = 0;
 	if (port_str==NULL) {
@@ -116,7 +162,7 @@ unsigned int port_str_to_int(char *port_str) {
 
  
 
-unsigned int ip_str_to_hl(char *ip_str) {
+static unsigned int ip_str_to_hl(char *ip_str) {
 
     /*convert the string to byte array first, e.g.: from "131.132.162.25" to [131][132][162][25]*/
 
@@ -158,7 +204,7 @@ unsigned int ip_str_to_hl(char *ip_str) {
 
  
 
-bool check_ip(unsigned int ip, unsigned int ip_rule, unsigned int mask) {
+static bool check_ip(unsigned int ip, unsigned int ip_rule, unsigned int mask) {
     unsigned int tmp = ntohl(ip);    //network to host long
     int cmp_len = 32;
     int i = 0, j = 0;
@@ -186,7 +232,7 @@ bool check_ip(unsigned int ip, unsigned int ip_rule, unsigned int mask) {
 }
 
 //the hook function itself: regsitered for filtering outgoing packets
-unsigned int hook_func_out(unsigned int hooknum, 
+static unsigned int hook_func_out(unsigned int hooknum, 
                            struct sk_buff *skb, 
                            const struct net_device *in,
                            const struct net_device *out,
@@ -313,7 +359,7 @@ unsigned int hook_func_out(unsigned int hooknum,
  
 //the hook function itself: registered for filtering incoming packets
 
- unsigned int hook_func_in(unsigned int hooknum, 
+static unsigned int hook_func_in(unsigned int hooknum, 
                            struct sk_buff *skb, 
                            const struct net_device *in,
                            const struct net_device *out,
@@ -370,7 +416,7 @@ printk(KERN_INFO "rule %d: a_rule->in_out = %u; a_rule->src_ip = %u; a_rule->src
        } else {
 
            //check the protocol
-           if ((a_rule->protocol == PRT_TCP) && (ip_header->protocol != PRT_TCP){
+           if ((a_rule->protocol == PRT_TCP) && (ip_header->protocol != PRT_TCP)){
              printk(KERN_INFO "rule %d not match: rule-TCP, packet->not TCP\n", i);
              continue;
             } else if ((a_rule->protocol == PRT_UDP) && (ip_header->protocol != PRT_UDP)) {
@@ -437,7 +483,7 @@ printk(KERN_INFO "rule %d: a_rule->in_out = %u; a_rule->src_ip = %u; a_rule->src
 
  
 
-void add_a_rule(struct efw_rule_policy* a_rule_desp) {
+static void add_a_rule(struct efw_rule_policy* a_rule_desp) {
     struct efw_rule* a_rule;
     a_rule = kmalloc(sizeof(*a_rule), GFP_KERNEL);
     if (a_rule == NULL) {
@@ -466,29 +512,20 @@ void add_a_rule(struct efw_rule_policy* a_rule_desp) {
 
  
 
-void add_a_test_rule(void) {
+static void add_a_test_rule(void) {
     struct efw_rule_policy a_test_rule;
     printk(KERN_INFO "add_a_test_rule\n");
     a_test_rule.in_out = IO_OUT;
-    //a_test_rule.src_ip = (char *)kmalloc(6, GFP_KERNEL);
-    //a_test_rule.src_ip = "137.132.165.27";
-    //a_test_rule.src_ip = NULL;
     a_test_rule.src_ip = (char *)kmalloc(16, GFP_KERNEL);
     strcpy(a_test_rule.src_ip, "127.0.0.1");   //change 10.0.2.15 to your own IP
-    //a_test_rule.src_netmask = NULL;
     a_test_rule.src_netmask = (char *)kmalloc(16, GFP_KERNEL);
     strcpy(a_test_rule.src_netmask, "0.0.0.0");
     a_test_rule.src_port = NULL;
-    //a_test_rule.dst_ip = (char *)kmalloc(16, GFP_KERNEL);
-    //strcpy(a_test_rule.dst_ip, "192.132.165.25");
     a_test_rule.dst_ip = NULL;
-    //a_test_rule.dst_netmask = (char *)kmalloc(16, GFP_KERNEL);
-    //strcpy(a_test_rule.dst_netmask, "255.255.255.0");
     a_test_rule.dst_netmask = NULL;
-    //a_test_rule.dst_port = "9000";
     a_test_rule.dst_port = NULL;
     a_test_rule.protocol = PRT_TCP;
-    a_test_rule.action = A_BLOCK;
+    a_test_rule.action = ACT_BLOCK;
     add_a_rule(&a_test_rule);
 
 }
@@ -496,7 +533,7 @@ void add_a_test_rule(void) {
  
 
  
-void delete_a_rule(int num) {
+static void delete_a_rule(int num) {
     int i = 0;
     struct list_head *p, *q;
     struct efw_rule *a_rule;
@@ -511,8 +548,12 @@ void delete_a_rule(int num) {
         }
     }
 }
+static int EFW_FILES_INITED[EFW_PROC_FILE_COUNT];
+
 /* Initialization routine */
 int __init sf_init_module(void) {
+  int i;
+  struct proc_dir_entry *tmpde;
     printk(KERN_INFO "initialize kernel module\n");
     INIT_LIST_HEAD(&(policy_list.list));
     /* Fill in the hook structure for incoming packet hook*/
@@ -529,6 +570,23 @@ int __init sf_init_module(void) {
     nf_register_hook(&nfhops_out);    // Register the hook
 
   pfs_entry = proc_mkdir("efw", NULL);
+  if(pfs_entry){
+    for(i = 0; i < EFW_PROC_FILE_COUNT; i += 1){
+      tmpde = proc_create(FileNames[i], 0 /* what is mode? */, pfs_entry, &efw_proc_ops);
+      if(tmpde){
+ 
+        /* TODO: error and other things */
+  
+        /* then update the global array */
+        pfs_rule_files[i] = tmpde;
+        EFW_FILES_INITED[i] = 1;
+      } else {
+/* this is delibrate; for visibility */
+        EFW_FILES_INITED[i] = 0;
+      }
+    }
+  } else { //if pfs_entry i.e. /proc/efw was not created
+  }
   /*this part of code is for testing purpose*/
 
     add_a_test_rule();
@@ -538,6 +596,7 @@ int __init sf_init_module(void) {
 /* Cleanup routine */
 
 void __exit sf_cleanup_module(void) {
+  int i = 0;
     struct list_head *p, *q;
     struct efw_rule *a_rule;
     nf_unregister_hook(&nfhops);
@@ -549,6 +608,11 @@ void __exit sf_cleanup_module(void) {
         list_del(p);
         kfree(a_rule);
     }
+  for(i = 0; i < EFW_PROC_FILE_COUNT; i += 1){
+    if(EFW_FILES_INITED[i]){
+      proc_remove(pfs_rule_files[i]);
+    }
+  }
   proc_remove(pfs_entry);
 	printk(KERN_INFO "kernel module unloaded.\n");
 }
