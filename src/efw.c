@@ -21,7 +21,8 @@
  * static unsigned int port_str_to_int(char *port_str);
  * static unsigned int ip_str_to_hl(char *ip_str);
  * static void ip_hl_to_str(unsigned int ip, char *ip_str)
- * static bool check_ip(unsigned int ip, unsigned int ip_rule, unsigned int mask);
+ * static bool check_ip(unsigned int ip, unsigned int ip_rule, 
+                        unsigned int mask);
  * static unsigned int hook_func_out(unsigned int hooknum, 
                            struct sk_buff *skb, 
                            const struct net_device *in,
@@ -74,10 +75,11 @@ MODULE_AUTHOR(AUTHORS);
 /* load time configuration variables */
 static int log_length = 64;
 module_param(log_length, int, S_IRUGO);
-/* log count is the thing that will keep track of the log messages in the doubly-linked list
+/* log count is the thing that will keep track of the log messages in the 
+ * doubly-linked list
  * we will be using dl-list as a queue after log_count >= log_length 
  * */
-static int log_count = 0; 
+//static int log_count = 0; 
 
 /* log_mode will tell what things to log.
  * MINIMAL: only log on exit from hooks once.
@@ -116,6 +118,7 @@ static char *FileNames[] = {
   "read", "write", "log_all", "match", "non_match"
 };
 
+#define RULE_FORMAT "s %s:%s/%s d %s:%s/%s p %s a %s"
 
 enum Protocols{
   PRT_INVALID  = -1,
@@ -143,14 +146,14 @@ enum LogMode{
   LM_ALL
 };
 /* structure for logging packets */
-static int log_pkt_count = 0 __initconst;
+//static int log_pkt_count __initconst = 0 ;
 struct pkt_log_msgs{
   char *msg;
   struct list_head list;
 };
 #define get_pkt_log_msg(name) container_of(name, struct pkt_log_msgs, list)
 
-static struct log_msgs *pkt_log;
+static struct pkt_log_msgs *pkt_log;
 
 //the structure used to register the function
 static struct nf_hook_ops nfhops_in;
@@ -202,9 +205,10 @@ static int action_str_to_int(char *str)
 {
   if(strcmp(str, "Accept") == 0){
     return ACT_ACCEPT;
-  } else if(strcmp(str, "Block"){
+  } else if(strcmp(str, "Block") == 0){
     return ACT_BLOCK;
   }
+  return -1;
 }
 
 static void protocol_to_str(int p, char *str)
@@ -222,17 +226,43 @@ static void protocol_to_str(int p, char *str)
 
 static int protocol_str_to_int(char *str)
 {
-  if(strcmp(str, "ALL"){
+  if(strcmp(str, "ALL") == 0){
     return PRT_ALL;
-  } else if(strcmp(str, "TCP"){
+  } else if(strcmp(str, "TCP") == 0){
     return PRT_TCP;
-  } else if(strcmp(str, "UDP"){
+  } else if(strcmp(str, "UDP") == 0){
     return PRT_UDP;
   } else{
     return PRT_INVALID;
   }
 }
 
+/* str_value
+ * 17 => "17"
+ */
+/*
+static void protocol_int_to_str_value(unsigned int protocol, char *str) {
+  sprintf(str, "%u", protocol);
+}
+*/
+/* str_value
+ * "17" => 17 
+ */
+/*
+static unsigned int protocol_value_str_to_int(char *str) {
+  unsigned int protocol = 0;    
+  int i = 0;
+
+  if (str == NULL) {
+    return 0;
+  } 
+  while(str[i] != '\0') {
+    protocol = protocol*10 + (str[i] - '0');
+    i += 1;
+  }
+  return protocol;
+}
+*/
 static void inout_to_str(int io, char *str)
 {
   if(io == IO_NEITHER){
@@ -240,7 +270,7 @@ static void inout_to_str(int io, char *str)
   } else if(io == IO_IN){
     strcpy(str, "In");
   } else if(io == IO_OUT){
-    strcpy(str, "Out";
+    strcpy(str, "Out");
   }
 }
 
@@ -252,17 +282,21 @@ static int inout_str_to_int(char *str){
   } else if(strcmp(str, "Out") == 0){
     return IO_OUT;
   }
+  return -1;
 }
-
+/*
 static int log_packet(struct efw_rule_char *rules)
 {
   int len;
   char *message;
-  struct log_msgs *log;
-  len = strlen(rules->dst_ip) + strlen(rules->dst_netmask) + strlen(rules->dst_port)
-      + strlen(rules->src_ip) + strlen(rules->src_netmask) + strlen(rules->port)
-      + strlen(rules->action) + strlen(rules->in_out) + strlen(rules->protocol)
-      + strlen("log  #1234567890: -> | ACT") + 30 ;
+  struct pkt_log_msgs *log;
+
+  len = strlen(rules->dst_ip)      + strlen(rules->dst_netmask) 
+      + strlen(rules->dst_port)    + strlen(rules->src_ip) 
+      + strlen(rules->src_netmask) + strlen(rules->src_port)
+      + strlen(rules->action)      + strlen(rules->in_out) 
+      + strlen(rules->protocol)    + strlen("log  #1234567890: -> | ACT") 
+      + 30 ;
       
       
   message = kzalloc(sizeof(char)*len, GFP_KERNEL);
@@ -270,7 +304,7 @@ static int log_packet(struct efw_rule_char *rules)
     printk(KERN_ERR "func-log_packet: cannot assign memory! for message.\n");
     return -ENOMEM;
   }
-  log = kzalloc(sizeof(struct log_msgs), GFP_KERNEL);
+  log = kzalloc(sizeof(struct pkt_log_msgs), GFP_KERNEL);
   if(log == NULL){
     printk(KERN_ERR "func-log_packet: cannot assign memory! for log.\n");
     return -ENOMEM;
@@ -278,9 +312,9 @@ static int log_packet(struct efw_rule_char *rules)
   
   
   sprintf(message, "log #%d - %s:%s/%s -> %s:%s/%s | %s | ACT = %s\n", 
-                   log_pkt_count, rules->src_ip, rules->src_port, rules->src_netmask,
-                                  rules->dst_ip, rules->dst_port, rules->dst_netmask,
-                   rules->in_out, rules->action 
+                   log_pkt_count, rules->src_ip, rules->src_port, 
+                   rules->src_netmask, rules->dst_ip, rules->dst_port, 
+                   rules->dst_netmask, rules->in_out, rules->action 
          );
   
   log -> msg = message;
@@ -288,7 +322,7 @@ static int log_packet(struct efw_rule_char *rules)
   
   return 0;
 }
- 
+ */
 
 static void port_int_to_str(unsigned int port, char *port_str) {
   sprintf(port_str, "%u", port);
@@ -309,22 +343,7 @@ static unsigned int port_str_to_int(char *port_str) {
     return port;
 }
 
-static void protocol_int_to_str(unsigned int protocol, char *str) {
-  sprintf(str, "%u", protocol);
-}
 
-static unsigned int protocol_str_to_int(char *str) {
-  unsigned int protocol = 0;    
-  int i = 0;
-  if (str==NULL) {
-    return 0;
-  } 
-  while(str[i] != '\0') {
-    protocol = protocol*10 + (str[i] - '0');
-    i += 1;
-  }
-  return protocol;
-}
 
 static void ip_hl_to_str(unsigned int ip, char *ip_str) {
     /*convert hl to byte array first*/
@@ -337,52 +356,65 @@ static void ip_hl_to_str(unsigned int ip, char *ip_str) {
   sprintf(ip_str, "%u.%u.%u.%u", 
                   ip_array[0], ip_array[1], 
                   ip_array[2], ip_array[3]);
-
+//printk(KERN_INFO "ip_str_to_hl convert %u to %s\n", ip, ip_str);
 }
 
-static unsigned int ip_str_to_hl(char *ip_str) {
+static unsigned int ip_str_to_hl(char *ip_str) 
+{
 
-    /*convert the string to byte array first, e.g.: from "131.132.162.25" to [131][132][162][25]*/
+/* convert the string to byte array first, 
+ * e.g.: from "131.132.162.25" to [131][132][162][25]
+ * */
 
     unsigned char ip_array[4];
     int i = 0;
     unsigned int ip = 0;
+//dump_stack(); 
+
+// printk(KERN_INFO "ip str to hl : rec:- %s \n",ip_str);
   if (ip_str==NULL) {
     return 0; 
   }
+  
+
   memset(ip_array, 0, 4);
   while (ip_str[i]!='.') {
-    ip_array[0] = ip_array[0]*10 + (ip_str[i += 1]-'0');
+    ip_array[0] = ip_array[0]*10 + (ip_str[i]-'0');
+    i += 1;
   }
   i += 1;
   while (ip_str[i]!='.') {
-    ip_array[1] = ip_array[1]*10 + (ip_str[i += 1]-'0');
+    ip_array[1] = ip_array[1]*10 + (ip_str[i]-'0');
+    i += 1;
   }
   i += 1;
   while (ip_str[i]!='.') {
-    ip_array[2] = ip_array[2]*10 + (ip_str[i += 1]-'0');
+    ip_array[2] = ip_array[2]*10 + (ip_str[i]-'0');
+    i += 1;
   }
   i += 1;
   while (ip_str[i]!='\0') {
-    ip_array[3] = ip_array[3]*10 + (ip_str[i += 1]-'0');
+    ip_array[3] = ip_array[3]*10 + (ip_str[i]-'0');
+    i += 1;
   }
   /*convert from byte array to host long integer format*/
   ip = (ip_array[0] << 24);
   ip = (ip | (ip_array[1] << 16));
   ip = (ip | (ip_array[2] << 8));
   ip = (ip | ip_array[3]);
-  //printk(KERN_INFO "ip_str_to_hl convert %s to %u\n", ip_str, ip);
+  printk(KERN_INFO "ip_str_to_hl convert %s to %u\n", ip_str, ip);
   return ip;
 }
 
- 
 
-/*check the two input IP addresses, see if they match, only the first few bits (masked bits) are compared*/
+/* check the two input IP addresses, see if they match, 
+ * only the first few bits (masked bits) are compared
+ * */
 
  
 
 static bool check_ip(unsigned int ip, unsigned int ip_rule, unsigned int mask) {
-    unsigned int tmp = ntohl(ip);    //network to host long
+    unsigned int tmp = ip;    //network to host long
     int cmp_len = 32;
     int i = 0, j = 0;
     //printk(KERN_INFO "compare ip: %u <=> %u\n", tmp, ip_rule);
@@ -407,61 +439,102 @@ static bool check_ip(unsigned int ip, unsigned int ip_rule, unsigned int mask) {
     }
     return true;
 }
+/* rule conversion functions 
+ * char to integral
+ * integral to char
+ */
 
+static void init_efw_rule_char(struct efw_rule_char* a_rule_char) {
+    a_rule_char->in_out      = (char*)kzalloc(16, GFP_KERNEL);
+    a_rule_char->src_ip      = (char*)kzalloc(16, GFP_KERNEL);
+    a_rule_char->src_netmask = (char*)kzalloc(16, GFP_KERNEL);
+    a_rule_char->src_port    = (char*)kzalloc(16, GFP_KERNEL);
+    a_rule_char->dst_ip      = (char*)kzalloc(16, GFP_KERNEL);
+    a_rule_char->dst_netmask = (char*)kzalloc(16, GFP_KERNEL);
+    a_rule_char->dst_port    = (char*)kzalloc(16, GFP_KERNEL);
+    a_rule_char->protocol    = (char*)kzalloc(16, GFP_KERNEL);
+    a_rule_char->action      = (char*)kzalloc(16, GFP_KERNEL);
+}
 
-static char * efw_rule_to_str(const struct efw_rule * rule){
+ /*
+static void delete_a_rule(int num) {
+    int i = 0;
+    struct list_head *p, *q;
+    struct efw_rule *a_rule;
+    //printk(KERN_INFO "delete a rule: %d\n", num);
+    list_for_each_safe(p, q, &policy_list.list) {
+        i += 1;
+        if (i == num) {
+            a_rule = list_entry(p, struct efw_rule, list);
+            list_del(p);
+            kfree(a_rule);
+            return;
+        }
+    }
+}
+*/
+
+static char * efw_rule_to_str(const struct efw_rule * rule)
+{
   char *rule_str = kmalloc(81, GFP_KERNEL);
-  char *tmp = kmalloc(20, GFP_KERNEL);
+  struct efw_rule_char tmp;
+  
+
   if(rule_str == NULL){
     //printk(KERN_ERR "Cannot allocate memory %d", RULE_LENGTH+1); 
     return NULL;
   }
   /* source */
-  sprintf(tmp, "src:-) ");
-  strcat(rule_str, tmp);
+  
+  init_efw_rule_char(&tmp);
+  ip_hl_to_str(rule -> src_ip, tmp.src_ip);
+  port_int_to_str(rule -> src_port, tmp.src_port);
+  ip_hl_to_str(rule -> src_netmask, tmp.src_netmask);
+  ip_hl_to_str(rule -> dst_ip, tmp.dst_ip);
+  port_int_to_str(rule -> dst_port, tmp.dst_port);
+  ip_hl_to_str(rule -> dst_netmask, tmp.dst_netmask);
+  protocol_to_str(rule -> protocol, tmp.protocol);
+  action_to_str(rule -> action, tmp.action);
 
-printk(KERN_INFO "%s", rule_str);
+  sprintf(rule_str, RULE_FORMAT,
+          tmp.src_ip,
+          tmp.src_port,
+          tmp.src_netmask,
+          tmp.dst_ip,
+          tmp.dst_port,
+          tmp.dst_netmask,
+          tmp.protocol,
+          tmp.action
+          );
 
-  ip_hl_to_str(rule -> src_ip, tmp);
-  strcat(rule_str, tmp);
-
-printk(KERN_INFO "%s", rule_str);
-
-  sprintf(tmp, ":");
-  strcat(rule_str, tmp);
-
-printk(KERN_INFO "%s", rule_str);
-  port_int_to_str(rule -> src_port, tmp);
-  strcat(rule_str, tmp);
-
-printk(KERN_INFO "%s", rule_str);
-  sprintf(tmp, "/");
-  strcat(rule_str, tmp);
-
-//printk(KERN_INFO "%s", rule_str);
-  //TODO: netmask_int_to_str(rule -> netmask, rule_str);
-  sprintf(tmp, " | dst:-) ");
-  strcat(rule_str, tmp);
-
-  ip_hl_to_str(rule -> dst_ip, tmp);
-  strcat(rule_str, tmp);
-
-  sprintf(tmp, ":");
-  strcat(rule_str, tmp);
-
-  port_int_to_str(rule -> dst_port, tmp);
-  strcat(rule_str, tmp);
-
-  sprintf(tmp, "/");
-  strcat(rule_str, tmp);
-
-  //TODO: netmask_int_to_str(rule -> netmask, rule_str);
-  sprintf(tmp, " | ACT:-) ");
-  strcat(rule_str, tmp);
-
-  //TODO: action_int_to_str(rule -> action, rule_str);
   strcat(rule_str, "\n\0");
   return rule_str;
+}
+
+static struct efw_rule *str_to_efw_rule(const char * rule_str)
+{
+  struct efw_rule *rule;
+  struct efw_rule_char tmp;
+  
+  if(rule_str == NULL){
+    return NULL;
+  }
+
+  rule = kmalloc(sizeof(struct efw_rule), GFP_KERNEL);
+  init_efw_rule_char(&tmp);
+
+  sscanf(rule_str, RULE_FORMAT, 
+         tmp.src_ip,
+         tmp.src_port,
+         tmp.src_netmask,
+         tmp.dst_ip,
+         tmp.dst_port,
+         tmp.dst_netmask,
+         tmp.protocol,
+         tmp.action
+        );
+
+  return rule;
 }
 
 
@@ -480,9 +553,9 @@ static void *efw_seq_start(struct seq_file *sfile, loff_t *pos){
 }
 /* for log_all file */
 static void *efw_seq_log_start(struct seq_file *sfile, loff_t *pos){
-  struct log_msgs *msg;
+  struct pkt_log_msgs *msg;
   loff_t off = 0;
-  list_for_each_entry(msg, &(pkt_log.list), list){
+  list_for_each_entry(msg, &(pkt_log->list), list){
     if(off++ == *pos){
       return msg;
     }
@@ -509,13 +582,12 @@ static void *efw_seq_next(struct seq_file *sfile, void *v, loff_t *pos){
 static void *efw_seq_log_next(struct seq_file *sfile, void *v, loff_t *pos){
   struct list_head *msghead = ((struct pkt_log_msgs *)v) -> list.next;
   (*pos) += 1;
-  return (msghead != &(pkt_log->lis))
+  return (msghead != &(pkt_log->list))
     ?    list_entry(msghead, struct pkt_log_msgs, list)
     :    NULL;
 }
-static void *efw_seq_stop(struct seq_file *sfile, void *v){
+static void efw_seq_stop(struct seq_file *sfile, void *v){
 /* TODO: */
-  return NULL;
 }
 
 static int efw_seq_show(struct seq_file *sfile, void *v){
@@ -588,6 +660,7 @@ static struct file_operations efw_proc_write_ops = {
 };
 
 
+
 //the hook function itself: regsitered for filtering outgoing packets
 static unsigned int hook_func_out(unsigned int hooknum, 
                            struct sk_buff *skb, 
@@ -606,13 +679,19 @@ static unsigned int hook_func_out(unsigned int hooknum,
    unsigned int dst_ip;
    unsigned int src_port;
    unsigned int dst_port;
-
+  char *ip_src, *ip_dst;
+  char *rule_str;
 /* defintions and assignments */
   ip_header = (struct iphdr *)skb_network_header(skb);
-  src_ip = (unsigned int)ip_header->saddr;
-  dst_ip = (unsigned int)ip_header->daddr;
+  src_ip = (unsigned int)ntohl(ip_header->saddr);
+  dst_ip = (unsigned int)ntohl(ip_header->daddr);
   i = src_port = dst_port = 0;
-
+  ip_src = kmalloc(16, GFP_KERNEL);
+  ip_dst = kmalloc(16, GFP_KERNEL);
+  ip_hl_to_str(src_ip, ip_src);
+  ip_hl_to_str(dst_ip, ip_dst);
+  rule_str = kmalloc(81, GFP_KERNEL);
+  
 /***get src and dest port number***/
    if (ip_header->protocol == PRT_UDP) {
        udp_header = (struct udphdr *)skb_transport_header(skb);
@@ -624,7 +703,7 @@ static unsigned int hook_func_out(unsigned int hooknum,
        dst_port = (unsigned int)ntohs(tcp_header->dest);
    }
 
-    //printk(KERN_INFO "OUT packet info: src ip: %u, src port: %u; dest ip: %u, dest port: %u; protocol: %u\n", src_ip, src_port, dst_ip, dst_port, ip_header->protocol); 
+   // printk(KERN_INFO "OUT packet info: src ip: %s, src port: %u; dest ip: %s, dest port: %u; protocol: %u\n", ip_src, src_port, ip_dst, dst_port, ip_header->protocol); 
 
   //go through the firewall list and check if there is a match
    //in case there are multiple matches, take the first one
@@ -632,21 +711,22 @@ static unsigned int hook_func_out(unsigned int hooknum,
    list_for_each(p, &policy_list.list) {
        i += 1;
        a_rule = list_entry(p, struct efw_rule, list);
-
-       //printk(KERN_INFO "rule %d: a_rule->in_out = %u; a_rule->src_ip = %u; a_rule->src_netmask=%u; a_rule->src_port=%u; a_rule->dst_ip=%u; a_rule->dst_netmask=%u; a_rule->dst_port=%u; a_rule->protocol=%u; a_rule->action=%u\n", i, a_rule->in_out, a_rule->src_ip, a_rule->src_netmask, a_rule->src_port, a_rule->dst_ip, a_rule->dst_netmask, a_rule->dst_port, a_rule->protocol, a_rule->action);
+  rule_str = efw_rule_to_str(a_rule);
+  printk(KERN_INFO "%s", rule_str);
+    //   printk(KERN_INFO "rule %d: a_rule->in_out = %u; a_rule->src_ip = %s; a_rule->src_netmask=%u; a_rule->src_port=%u; a_rule->dst_ip=%s; a_rule->dst_netmask=%u; a_rule->dst_port=%u; a_rule->protocol=%u; a_rule->action=%u\n", i, a_rule->in_out, ip_src, a_rule->src_netmask, a_rule->src_port, ip_dst, a_rule->dst_netmask, a_rule->dst_port, a_rule->protocol, a_rule->action);
 
        //if a rule doesn't specify as "out", skip it
 
        if (a_rule->in_out != IO_OUT) {
-//           //printk(KERN_INFO "rule %d (a_rule->in_out: %u) not match: out packet, rule doesn't specify as out\n", i, a_rule->in_out);
+           printk(KERN_INFO "rule %d (a_rule->in_out: %u) not match: out packet, rule doesn't specify as out\n", i, a_rule->in_out);
          continue;
        } else {
            //check the protoco
          if ((a_rule->protocol == PRT_TCP) && (ip_header->protocol != PRT_TCP)) {
-//              //printk(KERN_INFO "rule %d not match: rule-TCP, packet->not TCP\n", i);
+              printk(KERN_INFO "rule %d not match: rule-TCP, packet->not TCP\n", i);
            continue;
          } else if ((a_rule->protocol == PRT_UDP) && (ip_header->protocol != PRT_UDP)) {
-//               //printk(KERN_INFO "rule %d not match: rule-UDP, packet->not UDP\n", i);
+//               printk(KERN_INFO "rule %d not match: rule-UDP, packet->not UDP\n", i);
            continue;
 
          }
@@ -655,7 +735,7 @@ static unsigned int hook_func_out(unsigned int hooknum,
               //rule doesn't specify ip: match
          } else {
            if (!check_ip(src_ip, a_rule->src_ip, a_rule->src_netmask)) {
-// //printk(KERN_INFO "rule %d not match: src ip mismatch\n", i);
+printk(KERN_INFO "rule %d not match: src ip mismatch\n", i);
              continue;
            }
          }
@@ -664,7 +744,7 @@ static unsigned int hook_func_out(unsigned int hooknum,
               //rule doesn't specify ip: match
          } else {
              if (!check_ip(dst_ip, a_rule->dst_ip, a_rule->dst_netmask)) {
-//                  //printk(KERN_INFO "rule %d not match: dest ip mismatch\n", i);
+                 printk(KERN_INFO "rule %d not match: dest ip mismatch\n", i);
                continue;
              }
          }
@@ -672,7 +752,7 @@ static unsigned int hook_func_out(unsigned int hooknum,
          if (a_rule->src_port==0) {
                //rule doesn't specify src port: match
          } else if (src_port!=a_rule->src_port) {
-//               //printk(KERN_INFO "rule %d not match: src port dismatch\n", i);
+//               printk(KERN_INFO "rule %d not match: src port dismatch\n", i);
            continue;
 
          }
@@ -680,18 +760,18 @@ static unsigned int hook_func_out(unsigned int hooknum,
                //rule doens't specify dest port: match
 
          } else if (dst_port!=a_rule->dst_port) {
-//               //printk(KERN_INFO "rule %d not match: dest port mismatch\n", i);
+//               printk(KERN_INFO "rule %d not match: dest port mismatch\n", i);
            continue;
 
          }
            //a match is found: take action
          if (a_rule->action == ACT_BLOCK) {
-//               //printk(KERN_INFO "a match is found: %d, drop the packet\n", i);
-//              //printk(KERN_INFO "---------------------------------------\n");
+               printk(KERN_INFO "a match is found: %d, drop the packet\n", i);
+              printk(KERN_INFO "---------------------------------------\n");
            return NF_DROP;
          } else {
-//               //printk(KERN_INFO "a match is found: %d, accept the packet\n", i);
-//              //printk(KERN_INFO "---------------------------------------\n");
+             printk(KERN_INFO "a match is found: %d, accept the packet\n", i);
+             printk(KERN_INFO "---------------------------------------\n");
            return NF_ACCEPT;
          }
 
@@ -720,11 +800,14 @@ static unsigned int hook_func_in(unsigned int hooknum,
   struct list_head *p;
   struct efw_rule *a_rule;
   int i = 0;
+  char *rule_str;
   /**get src and dest ip addresses**/
-  unsigned int src_ip = (unsigned int)ip_header->saddr;
-  unsigned int dst_ip = (unsigned int)ip_header->daddr;
+/* I missed ntohl(): can you guess the error. It's related to lilliputs. */
+  unsigned int src_ip = (unsigned int)ntohl(ip_header->saddr);
+  unsigned int dst_ip = (unsigned int)ntohl(ip_header->daddr);
   unsigned int src_port = 0;
   unsigned int dst_port = 0;
+  rule_str = kmalloc(81, GFP_KERNEL);
   /***get src and dest port number***/
   if (ip_header->protocol == PRT_UDP) {
     udp_header = (struct udphdr *)(skb_transport_header(skb)+20);
@@ -744,6 +827,8 @@ static unsigned int hook_func_in(unsigned int hooknum,
   list_for_each(p, &policy_list.list) {
     i += 1;
     a_rule = list_entry(p, struct efw_rule, list);
+  rule_str = efw_rule_to_str(a_rule);
+  printk(KERN_INFO "%s", rule_str);
 /*    printk(KERN_INFO "rule %d: a_rule->in_out = %u; a_rule->src_ip = %u; " \
                      "a_rule->src_netmask=%u; a_rule->src_port=%u; "       \
                      "a_rule->dst_ip=%u; a_rule->dst_netmask=%u; "         \
@@ -834,26 +919,28 @@ static unsigned int hook_func_in(unsigned int hooknum,
 
 static void add_a_rule(struct efw_rule_char* a_rule_char) {
     struct efw_rule* a_rule;
+  char *ip_str = kmalloc(16, GFP_KERNEL);
     a_rule = kmalloc(sizeof(*a_rule), GFP_KERNEL);
     if (a_rule == NULL) {
-        //printk(KERN_INFO "error: cannot allocate memory for a_new_rule\n");
+        printk(KERN_ERR "error: cannot allocate memory for a_new_rule\n");
         return;
     }
-    a_rule->in_out = a_rule_char->in_out;
+    a_rule->in_out = inout_str_to_int(a_rule_char->in_out);
     a_rule->src_ip = ip_str_to_hl(a_rule_char->src_ip);
     a_rule->src_netmask = ip_str_to_hl(a_rule_char->src_netmask);
     a_rule->src_port = port_str_to_int(a_rule_char->src_port);
     a_rule->dst_ip = ip_str_to_hl(a_rule_char->dst_ip);
     a_rule->dst_netmask = ip_str_to_hl(a_rule_char->dst_netmask);
     a_rule->dst_port = port_str_to_int(a_rule_char->dst_port);
-    a_rule->protocol = a_rule_char->protocol;
-    a_rule->action = a_rule_char->action;
-/*    printk(KERN_INFO "add_a_rule: in_out=%u, src_ip=%u, src_netmask=%u, \
+    a_rule->protocol = protocol_str_to_int(a_rule_char->protocol);
+    a_rule->action = action_str_to_int(a_rule_char->action);
+  ip_hl_to_str(a_rule->src_ip,ip_str),
+    printk(KERN_INFO "add_a_rule: in_out=%u, src_ip=%s, src_netmask=%u, \
 	src_port=%u, dst_ip=%u, dst_netmask=%u, dst_port=%u, protocol=%u, \
-	action=%u\n", a_rule->in_out, a_rule->src_ip, a_rule->src_netmask, 
+	action=%u\n", a_rule->in_out, ip_str, a_rule->src_netmask, 
 	 a_rule->src_port, a_rule->dst_ip, a_rule->dst_netmask,
 	 a_rule->dst_port, a_rule->protocol, a_rule->action);
-*/  
+  
    INIT_LIST_HEAD(&(a_rule->list));
    list_add_tail(&(a_rule->list), &(policy_list.list));
 
@@ -863,52 +950,27 @@ static void add_a_rule(struct efw_rule_char* a_rule_char) {
 
 static void add_a_test_rule(void) {
     struct efw_rule_char a_test_rule;
-  init_efw_rule_char(&a_test_rule);
+//  init_efw_rule_char(&a_test_rule);
     //printk(KERN_INFO "add_a_test_rule\n");
-    a_test_rule.in_out = IO_OUT;
+    a_test_rule.in_out = (char *)kmalloc(16, GFP_KERNEL);
+    inout_to_str(IO_OUT, a_test_rule.in_out);
     a_test_rule.src_ip = (char *)kmalloc(16, GFP_KERNEL);
-    strcpy(a_test_rule.src_ip, "127.0.0.1");   //change 10.0.2.15 to your own IP
+    strcpy(a_test_rule.src_ip, "192.9.200.159");   //change 10.0.2.15 to your own IP
     a_test_rule.src_netmask = (char *)kzalloc(16, GFP_KERNEL);
     strcpy(a_test_rule.src_netmask, "0.0.0.0");
     a_test_rule.src_port = NULL;
     a_test_rule.dst_ip = NULL;
     a_test_rule.dst_netmask = NULL;
     a_test_rule.dst_port = NULL;
-    a_test_rule.protocol = PRT_TCP;
-    a_test_rule.action = ACT_BLOCK;
+    a_test_rule.protocol = (char *)kmalloc(16, GFP_KERNEL);
+  protocol_to_str(PRT_ALL, a_test_rule.protocol);
+    a_test_rule.action = (char *)kmalloc(16, GFP_KERNEL);
+  action_to_str(ACT_BLOCK, a_test_rule.action);
     add_a_rule(&a_test_rule);
 
 }
 
-static void init_efw_rule_char(struct efw_rule_char* a_rule_char) {
-    a_rule_char->in_out      = (char*)kzalloc(16, GFP_KERNEL);
-    a_rule_char->src_ip      = (char*)kzalloc(16, GFP_KERNEL);
-    a_rule_char->src_netmask = (char*)kzalloc(16, GFP_KERNEL);
-    a_rule_char->src_port    = (char*)kzalloc(16, GFP_KERNEL);
-    a_rule_char->dst_ip      = (char*)kzalloc(16, GFP_KERNEL);
-    a_rule_char->dst_netmask = (char*)kzalloc(16, GFP_KERNEL);
-    a_rule_char->dst_port    = (char*)kzalloc(16, GFP_KERNEL);
-    a_rule_char->protocol    = (char*)kzalloc(16, GFP_KERNEL);
-    a_rule_char->action      = (char*)kzalloc(16, GFP_KERNEL);
-}
- 
 
- 
-static void delete_a_rule(int num) {
-    int i = 0;
-    struct list_head *p, *q;
-    struct efw_rule *a_rule;
-    //printk(KERN_INFO "delete a rule: %d\n", num);
-    list_for_each_safe(p, q, &policy_list.list) {
-        i += 1;
-        if (i == num) {
-            a_rule = list_entry(p, struct efw_rule, list);
-            list_del(p);
-            kfree(a_rule);
-            return;
-        }
-    }
-}
 static int EFW_FILES_INITED[EFW_PROC_FILE_COUNT];
 
 /* Initialization routine */
@@ -968,7 +1030,7 @@ void __exit efw_cleanup_module(void) {
   int i = 0;
     struct list_head *p, *q;
     struct efw_rule *a_rule;
-    nf_unregister_hook(&nfhops);
+    nf_unregister_hook(&nfhops_in);
     nf_unregister_hook(&nfhops_out);
     //printk(KERN_INFO "free policy list\n");
     list_for_each_safe(p, q, &policy_list.list) {
@@ -992,3 +1054,5 @@ void __exit efw_cleanup_module(void) {
 
 module_init(efw_init_module);
 module_exit(efw_cleanup_module);
+
+
