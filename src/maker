@@ -1,0 +1,8 @@
+#make -C /usr/src/linux-2.6.37.1-1.2 M=`pwd` modules
+#make -C /usr/src/linux-2.6.37.1-1.2 M=`pwd` modules
+
+make -C /media/90483f86-a5f8-0ba0-85aa-6a5f94644f04/linux-3.12.8/ M=`pwd` modules
+insmod efw.ko
+
+
+

@@ -220,7 +220,7 @@ static void protocol_to_str(int p, char *str)
   } else if(p == PRT_UDP){
     strcpy(str, "UDP");
   } else{
-    strcpy(str, "Invalid-Protocol");
+    strcpy(str, "ANY");
   }
 }
 
@@ -637,6 +637,31 @@ static int efw_proc_write_open(struct inode *inode, struct file *file){
   return seq_open(file, &efw_seq_write_ops);
 }
 
+
+ssize_t procfx_write(struct file *file, const char __user *buffer, ssize_t len, loff_t *ppos)
+{
+  char *rule_str;
+
+  if(buffer == NULL){
+    printk(KERN_ERR "User buffer is empty.\n");
+    return -EFAULT;
+  }
+  
+  rule_str = kzalloc(len+1, GFP_KERNEL);
+  if(rule_str == NULL){
+    printk(KERN_ERR "No mem for rule_str in procfx_write.\n");
+    return -ENOMEM;
+  }
+  if (copy_from_user(rule_str, buffer, len)) {
+    printk(KERN_ERR "Cannot copy from user in procfx_write.\n");
+    return -EFAULT;
+  }
+  printk(KERN_INFO "Adding rule: %s\n", rule_str);
+  /* TODO: prepare rule, add to list */
+  return len;
+}
+
+
 static struct file_operations efw_proc_ops = {
   .owner = THIS_MODULE,
   .open = efw_proc_open,
@@ -657,8 +682,8 @@ static struct file_operations efw_proc_write_ops = {
   .read = seq_read,
   .llseek = seq_lseek,
   .release = seq_release,
+  .write = procfx_write,
 };
-
 
 
 //the hook function itself: regsitered for filtering outgoing packets

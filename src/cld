@@ -1,0 +1,4 @@
+rm *.o *.symvers *.ko *.order *.mod.c
+rm .*.cmd
+rm -r .tmp_versions
+rm *~
