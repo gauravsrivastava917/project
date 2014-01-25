@@ -131,6 +131,7 @@ enum InOut{
 enum Actions{
   ACT_BLOCK      = 0,
   ACT_UNBLOCK    = 1,
+  ACT_ACCEPT     = 1,
 };
 /* I know that I could have left 0,1 .. out in InOut and Action, these
  * are explicit so that the rules stay visible
@@ -151,7 +152,9 @@ struct pkt_log_msgs{
 
 static struct log_msgs *pkt_log;
 
-
+//the structure used to register the function
+static struct nf_hook_ops nfhops_in;
+static struct nf_hook_ops nfhops_out;
 
 /*structure for firewall policies*/ 
 struct efw_rule_char {
@@ -186,8 +189,73 @@ struct efw_rule {
 
 static struct efw_rule policy_list;
 
+static void action_to_str(int act, char *str)
+{
+  if(act == ACT_BLOCK){
+    strcpy(str, "Block");
+  } else if(act == ACT_ACCEPT){
+    strcpy(str, "Accept");
+  }
+}
 
-static int log_packet(struct efw_rule_char *rules){
+static int action_str_to_int(char *str)
+{
+  if(strcmp(str, "Accept") == 0){
+    return ACT_ACCEPT;
+  } else if(strcmp(str, "Block"){
+    return ACT_BLOCK;
+  }
+}
+
+static void protocol_to_str(int p, char *str)
+{
+  if(p == PRT_ALL){
+    strcpy(str, "All");
+  } else if(p == PRT_TCP){
+    strcpy(str, "TCP");
+  } else if(p == PRT_UDP){
+    strcpy(str, "UDP");
+  } else{
+    strcpy(str, "Invalid-Protocol");
+  }
+}
+
+static int protocol_str_to_int(char *str)
+{
+  if(strcmp(str, "ALL"){
+    return PRT_ALL;
+  } else if(strcmp(str, "TCP"){
+    return PRT_TCP;
+  } else if(strcmp(str, "UDP"){
+    return PRT_UDP;
+  } else{
+    return PRT_INVALID;
+  }
+}
+
+static void inout_to_str(int io, char *str)
+{
+  if(io == IO_NEITHER){
+    strcpy(str, "Neither");
+  } else if(io == IO_IN){
+    strcpy(str, "In");
+  } else if(io == IO_OUT){
+    strcpy(str, "Out";
+  }
+}
+
+static int inout_str_to_int(char *str){
+  if(strcmp(str, "Neither") == 0){
+    return IO_NEITHER;
+  } else if(strcmp(str, "In") == 0){
+    return IO_IN;
+  } else if(strcmp(str, "Out") == 0){
+    return IO_OUT;
+  }
+}
+
+static int log_packet(struct efw_rule_char *rules)
+{
   int len;
   char *message;
   struct log_msgs *log;
@@ -229,7 +297,7 @@ static void port_int_to_str(unsigned int port, char *port_str) {
 static unsigned int port_str_to_int(char *port_str) {
 	unsigned int port = 0;    
 	int i = 0;
-	if (port_str==NULL) {
+	if (port_str == NULL) {
 		return 0;
 	} 
 
@@ -396,9 +464,7 @@ printk(KERN_INFO "%s", rule_str);
   return rule_str;
 }
 
-//the structure used to register the function
-static struct nf_hook_ops nfhops;
-static struct nf_hook_ops nfhops_out;
+
 
 /* seq_file interface */
 static void *efw_seq_start(struct seq_file *sfile, loff_t *pos){
@@ -619,7 +685,7 @@ static unsigned int hook_func_out(unsigned int hooknum,
 
          }
            //a match is found: take action
-         if (a_rule->action==0) {
+         if (a_rule->action == ACT_BLOCK) {
 //               //printk(KERN_INFO "a match is found: %d, drop the packet\n", i);
 //              //printk(KERN_INFO "---------------------------------------\n");
            return NF_DROP;
@@ -710,7 +776,7 @@ static unsigned int hook_func_in(unsigned int hooknum,
 
            //check the ip address
            if (a_rule->src_ip == 0) {
- /* future? if ever */
+ /* if rule has source IP = 0, we need to move on to nxt checking. */
            } else {
               if (!check_ip(src_ip, a_rule->src_ip, a_rule->src_netmask)) {
                   //printk(KERN_INFO "rule %d not match: src ip mismatch\n", i);
@@ -719,7 +785,7 @@ static unsigned int hook_func_in(unsigned int hooknum,
 
            }
            if (a_rule->dst_ip == 0) {
- /* future? if ever */
+ /* oh we didn't decide on dst IP in the rule so move on to nxt condition. */
           } else {
 
                if (!check_ip(dst_ip, a_rule->dst_ip, a_rule->dst_netmask)){ 
@@ -729,8 +795,8 @@ static unsigned int hook_func_in(unsigned int hooknum,
            }
 
            //check the port number
-           if (a_rule->src_port==0) {
-               //rule doesn't specify src port: match
+           if (a_rule->src_port == 0) {
+               /*rule doesn't specify src port: so its a match */
            } else if (src_port!=a_rule->src_port) {
                //printk(KERN_INFO "rule %d not match: src port mismatch\n", i);
                continue;
@@ -743,7 +809,7 @@ static unsigned int hook_func_in(unsigned int hooknum,
                continue;
            }
            //a match is found: take action
-           if (a_rule->action==0) {
+           if (a_rule->action == ACT_BLOCK) {
                //printk(KERN_INFO "a match is found: %d, drop the packet\n", i);
                //printk(KERN_INFO "---------------------------------------\n");
                return NF_DROP;
@@ -797,6 +863,7 @@ static void add_a_rule(struct efw_rule_char* a_rule_char) {
 
 static void add_a_test_rule(void) {
     struct efw_rule_char a_test_rule;
+  init_efw_rule_char(&a_test_rule);
     //printk(KERN_INFO "add_a_test_rule\n");
     a_test_rule.in_out = IO_OUT;
     a_test_rule.src_ip = (char *)kmalloc(16, GFP_KERNEL);
@@ -851,11 +918,11 @@ int __init efw_init_module(void) {
     //printk(KERN_INFO "initialize kernel module\n");
     INIT_LIST_HEAD(&(policy_list.list));
     /* Fill in the hook structure for incoming packet hook*/
-    nfhops.hook = hook_func_in;
-    nfhops.hooknum = NF_INET_LOCAL_IN;
-    nfhops.pf = PF_INET;
-    nfhops.priority = NF_IP_PRI_FIRST;
-    nf_register_hook(&nfhops);         // Register the hook
+    nfhops_in.hook = hook_func_in;
+    nfhops_in.hooknum = NF_INET_LOCAL_IN;
+    nfhops_in.pf = PF_INET;
+    nfhops_in.priority = NF_IP_PRI_FIRST;
+    nf_register_hook(&nfhops_in);         // Register the hook
     /* Fill in the hook structure for outgoing packet hook*/
     nfhops_out.hook = hook_func_out;
     nfhops_out.hooknum = NF_INET_LOCAL_OUT;
@@ -863,6 +930,7 @@ int __init efw_init_module(void) {
     nfhops_out.priority = NF_IP_PRI_FIRST;
     nf_register_hook(&nfhops_out);    // Register the hook
 /* PROC FS code */
+
   pfs_entry = proc_mkdir("efw", NULL);
   if(pfs_entry){
     for(i = 0; i < EFW_PROC_FILE_COUNT; i += 1){
