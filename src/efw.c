@@ -639,8 +639,23 @@ static int efw_proc_write_open(struct inode *inode, struct file *file)
   return seq_open(file, &efw_seq_write_ops);
 }
 
-
-ssize_t procfx_write(struct file *file, const char __user *buffer, ssize_t len, loff_t *ppos)
+/* procfx_write
+ * 
+ * this function is responsible for adding rules and
+ * and deleting rules dynamically.
+ * 
+ * just echo "rule" > /proc/efw/write OR
+ * use client program to add-or-delete "rule" 
+ *
+ * read documentation for syntax of rule.
+ */
+ssize_t procfx_write
+(
+        struct file *file,
+  const char __user *buffer,
+            ssize_t len,
+             loff_t *ppos
+)
 {
   char *rule_str;
 
@@ -663,7 +678,13 @@ ssize_t procfx_write(struct file *file, const char __user *buffer, ssize_t len, 
   return len;
 }
 
-
+/* file operations 
+ * 
+ * efw_proc_ops
+ * efw_proc_log_ops
+ * efw_proc_write_ops
+ *
+ */
 static struct file_operations efw_proc_ops = {
   .owner = THIS_MODULE,
   .open = efw_proc_open,
@@ -688,51 +709,61 @@ static struct file_operations efw_proc_write_ops = {
 };
 
 
-//the hook function itself: regsitered for filtering outgoing packets
-static unsigned int hook_func_out(unsigned int hooknum, 
-                                  struct sk_buff *skb, 
-                                  const struct net_device *in,
-                                  const struct net_device *out,
-                                  int (*okfn)(struct sk_buff *)) 
-{
+/* netfilter hook functions
+ *
+ * hook_func_out : for egress packets
+ * hook_func_in  : for ingres packets
+ *
+ */
+static unsigned int hook_func_out /* function netfilter hook */
+(                                 /* parameter list */
+  unsigned int hooknum, 
+  struct sk_buff *skb, 
+  const struct net_device *in,
+  const struct net_device *out,
+  int (*okfn)(struct sk_buff *)
+) 
+{                                 /* function body */
 /* declarations */
-   struct iphdr  *ip_header; 
-   struct udphdr *udp_header;
-   struct tcphdr *tcp_header;
-   struct list_head *p;
-   struct efw_rule *a_rule;
-   int i;
-   unsigned int src_ip;
-   unsigned int dst_ip;
-   unsigned int src_port;
-   unsigned int dst_port;
+  struct iphdr  *ip_header; 
+  struct udphdr *udp_header;
+  struct tcphdr *tcp_header;
+  struct list_head *p;
+  struct efw_rule *a_rule;
+  int i;
+  unsigned int src_ip;
+  unsigned int dst_ip;
+  unsigned int src_port;
+  unsigned int dst_port;
   char *ip_src, *ip_dst;
   char *rule_str;
+
 /* defintions and assignments */
   ip_header = (struct iphdr *)skb_network_header(skb);
-  src_ip = (unsigned int)ntohl(ip_header->saddr);
-  dst_ip = (unsigned int)ntohl(ip_header->daddr);
+  src_ip    = (unsigned int)  ntohl(ip_header->saddr);
+  dst_ip    = (unsigned int)  ntohl(ip_header->daddr);
+  ip_src    = kmalloc(16, GFP_KERNEL);
+  ip_dst    = kmalloc(16, GFP_KERNEL);
+  rule_str  = kmalloc(81, GFP_KERNEL);
+
   i = src_port = dst_port = 0;
-  ip_src = kmalloc(16, GFP_KERNEL);
-  ip_dst = kmalloc(16, GFP_KERNEL);
+
   ip_hl_to_str(src_ip, ip_src);
   ip_hl_to_str(dst_ip, ip_dst);
-  rule_str = kmalloc(81, GFP_KERNEL);
+
   
-/***get src and dest port number***/
-   if (ip_header->protocol == PRT_UDP) {
-       udp_header = (struct udphdr *)skb_transport_header(skb);
-       src_port = (unsigned int)ntohs(udp_header->source);
-       dst_port = (unsigned int)ntohs(udp_header->dest);
-   } else if (ip_header->protocol == PRT_TCP) {
-       tcp_header = (struct tcphdr *)skb_transport_header(skb);
-       src_port = (unsigned int)ntohs(tcp_header->source);
-       dst_port = (unsigned int)ntohs(tcp_header->dest);
-   }
+/* get src and dest port number */
+  if (ip_header->protocol == PRT_UDP) {
+    udp_header = (struct udphdr *)skb_transport_header(skb);
+    src_port   = (unsigned int)   ntohs(udp_header->source);
+    dst_port   = (unsigned int)   ntohs(udp_header->dest);
+  } else if (ip_header->protocol == PRT_TCP) {
+    tcp_header = (struct tcphdr *)skb_transport_header(skb);
+    src_port   = (unsigned int)   ntohs(tcp_header->source);
+    dst_port   = (unsigned int)   ntohs(tcp_header->dest);
+  }
 
-   // printk(KERN_INFO "OUT packet info: src ip: %s, src port: %u; dest ip: %s, dest port: %u; protocol: %u\n", ip_src, src_port, ip_dst, dst_port, ip_header->protocol); 
-
-  //go through the firewall list and check if there is a match
+ //go through the firewall list and check if there is a match
    //in case there are multiple matches, take the first one
 
    list_for_each(p, &policy_list.list) {
@@ -740,12 +771,14 @@ static unsigned int hook_func_out(unsigned int hooknum,
        a_rule = list_entry(p, struct efw_rule, list);
   rule_str = efw_rule_to_str(a_rule);
   printk(KERN_INFO "%s", rule_str);
-    //   printk(KERN_INFO "rule %d: a_rule->in_out = %u; a_rule->src_ip = %s; a_rule->src_netmask=%u; a_rule->src_port=%u; a_rule->dst_ip=%s; a_rule->dst_netmask=%u; a_rule->dst_port=%u; a_rule->protocol=%u; a_rule->action=%u\n", i, a_rule->in_out, ip_src, a_rule->src_netmask, a_rule->src_port, ip_dst, a_rule->dst_netmask, a_rule->dst_port, a_rule->protocol, a_rule->action);
-
+    
        //if a rule doesn't specify as "out", skip it
 
        if (a_rule->in_out != IO_OUT) {
-           printk(KERN_INFO "rule %d (a_rule->in_out: %u) not match: out packet, rule doesn't specify as out\n", i, a_rule->in_out);
+           printk(KERN_INFO "rule %d (a_rule->in_out: %u) not match: out packet, "
+                            "rule doesn't specify as out\n",
+                            i, a_rule->in_out
+                 );
          continue;
        } else {
            //check the protoco
@@ -814,54 +847,69 @@ printk(KERN_INFO "rule %d not match: src ip mismatch\n", i);
  
 //the hook function itself: registered for filtering incoming packets
 
-static unsigned int hook_func_in(unsigned int hooknum, 
-                           struct sk_buff *skb, 
-                           const struct net_device *in,
-                           const struct net_device *out,
-                           int (*okfn)(struct sk_buff *)) 
-{
-   /*get src address, src netmask, src port, dest ip, dest netmask, dest port, protocol*/  
-  struct iphdr *ip_header = (struct iphdr *)skb_network_header(skb);
-  struct udphdr *udp_header;
-  struct tcphdr *tcp_header;
+static unsigned int hook_func_in /* function netfilter hook */
+(                                /* parameter list */
+  unsigned int hooknum, 
+        struct sk_buff    *skb, 
+  const struct net_device *in,
+  const struct net_device *out,
+  int (*okfn)(struct sk_buff *)
+) 
+{                                /* function body */
+/* declarations */
+  struct iphdr     *ip_header;
+  struct udphdr    *udp_header;
+  struct tcphdr    *tcp_header;
   struct list_head *p;
-  struct efw_rule *a_rule;
-  int i = 0;
+  struct efw_rule  *a_rule;
+
+  unsigned int src_ip;
+  unsigned int dst_ip
+  unsigned int src_port;
+  unsigned int dst_port;
+
+  int i;
   char *rule_str;
-  /**get src and dest ip addresses**/
-/* I missed ntohl(): can you guess the error. It's related to lilliputs. */
-  unsigned int src_ip = (unsigned int)ntohl(ip_header->saddr);
-  unsigned int dst_ip = (unsigned int)ntohl(ip_header->daddr);
-  unsigned int src_port = 0;
-  unsigned int dst_port = 0;
+
+/* definitions */
+  ip_header  = (struct iphdr *)skb_network_header(skb);
+  i = 0;
+
+/* If I miss ntohl(): can you guess the error? It's related to lilliputians. */
+  src_ip = (unsigned int)ntohl(ip_header->saddr);
+  dst_ip = (unsigned int)ntohl(ip_header->)
+{daddr);
+  src_port = 0;
+  dst_port = 0;
   rule_str = kmalloc(81, GFP_KERNEL);
-  /***get src and dest port number***/
-  if (ip_header->protocol == PRT_UDP) {
+
+  if(ip_header->protocol == PRT_UDP) {
     udp_header = (struct udphdr *)(skb_transport_header(skb)+20);
-    src_port = (unsigned int)ntohs(udp_header->source);
-    dst_port = (unsigned int)ntohs(udp_header->dest);
+    src_port   = (unsigned int)    ntohs(udp_header->source);
+    dst_port   = (unsigned int)    ntohs(udp_header->dest);
   } else if (ip_header->protocol == PRT_TCP) {
     tcp_header = (struct tcphdr *)(skb_transport_header(skb)+20);
-    src_port = (unsigned int)ntohs(tcp_header->source);
-    dst_port = (unsigned int)ntohs(tcp_header->dest);
+    src_port   = (unsigned int)    ntohs(tcp_header->source);
+    dst_port   = (unsigned int)    ntohs(tcp_header->dest);
   }
-  //printk(KERN_INFO "IN packet info: src ip: %u, src port: %u; dest ip: %u, dest port: %u; protocol: %u\n", src_ip, src_port, dst_ip, dst_port, ip_header->protocol); 
 
-   //go through the firewall list and check if there is a match
-
-   //in case there are multiple matches, take the first one
-
+/* go through the firewall list and check if there is a match
+ * in case there are multiple matches, take the first one
+ */
   list_for_each(p, &policy_list.list) {
     i += 1;
     a_rule = list_entry(p, struct efw_rule, list);
-  rule_str = efw_rule_to_str(a_rule);
-  printk(KERN_INFO "%s", rule_str);
 
+/* for tracking the rule values
+    rule_str = efw_rule_to_str(a_rule);
+    printk(KERN_INFO "%s", rule_str);
+*/
 
   //if a rule doesn't specify as "in", skip it
   if (a_rule->in_out != IO_IN) {
     //printk(KERN_INFO "rule %d (a_rule->in_out:%u) not match: in packet, rule doesn't specify as in\n", i, a_rule->in_out);
-
+)
+{
            continue;
        } else {
 
@@ -901,7 +949,8 @@ static unsigned int hook_func_in(unsigned int hooknum,
            } else if (src_port!=a_rule->src_port) {
                //printk(KERN_INFO "rule %d not match: src port mismatch\n", i);
                continue;
-           }
+           })
+{
            if (a_rule->dst_port == 0) {
                //rule doens't specify dest port: match
            }
@@ -933,7 +982,8 @@ static unsigned int hook_func_in(unsigned int hooknum,
 
  
 
-static void add_a_rule(struct efw_rule_char* a_rule_char) {
+static void add_a_rule(struct efw_rule_char* a_rule_char) /* function */
+{
     struct efw_rule* a_rule;
   char *ip_str = kmalloc(16, GFP_KERNEL);
     a_rule = kmalloc(sizeof(*a_rule), GFP_KERNEL);
@@ -990,7 +1040,8 @@ static void add_a_test_rule(void) {
 static int EFW_FILES_INITED[EFW_PROC_FILE_COUNT];
 
 /* Initialization routine */
-int __init efw_init_module(void) {
+int __init efw_init_module(void)
+{
   int i;
   struct proc_dir_entry *tmpde;
   struct file_operations *fops;
@@ -1047,7 +1098,8 @@ int __init efw_init_module(void) {
 
 /* Cleanup routine */
 
-void __exit efw_cleanup_module(void) {
+void __exit efw_cleanup_module(void)
+{
   int i = 0;
   struct list_head *p, *q;
   struct efw_rule *a_rule;
