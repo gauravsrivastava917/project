@@ -1048,13 +1048,13 @@ int __init efw_init_module(void)
 
   INIT_LIST_HEAD(&(policy_list.list));
 /* Fill in the hook structure for incoming packet hook*/
-  nfhops_in.hook = hook_func_in;
+  nfhops_in.hook = hook_func_in; /* function we wrote for ingress traffic */
   nfhops_in.hooknum = NF_INET_LOCAL_IN;
   nfhops_in.pf = PF_INET;
   nfhops_in.priority = NF_IP_PRI_FIRST;
   nf_register_hook(&nfhops_in);         // Register the hook
 /* Fill in the hook structure for outgoing packet hook*/
-  nfhops_out.hook = hook_func_out;
+  nfhops_out.hook = hook_func_out; /* function we wrote for egress traffic */
   nfhops_out.hooknum = NF_INET_LOCAL_OUT;
   nfhops_out.pf = PF_INET;
   nfhops_out.priority = NF_IP_PRI_FIRST;
