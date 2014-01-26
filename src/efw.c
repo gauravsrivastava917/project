@@ -775,18 +775,18 @@ static unsigned int hook_func_out /* function netfilter hook */
        //if a rule doesn't specify as "out", skip it
 
        if (a_rule->in_out != IO_OUT) {
-           printk(KERN_INFO "rule %d (a_rule->in_out: %u) not match: out packet, "
+         printk(KERN_INFO "rule %d (a_rule->in_out: %u) not match: out packet, "
                             "rule doesn't specify as out\n",
                             i, a_rule->in_out
-                 );
+               );
          continue;
        } else {
            //check the protoco
          if ((a_rule->protocol == PRT_TCP) && (ip_header->protocol != PRT_TCP)) {
-              printk(KERN_INFO "rule %d not match: rule-TCP, packet->not TCP\n", i);
+           printk(KERN_INFO "rule %d not match: rule-TCP, packet->not TCP\n", i);
            continue;
          } else if ((a_rule->protocol == PRT_UDP) && (ip_header->protocol != PRT_UDP)) {
-//               printk(KERN_INFO "rule %d not match: rule-UDP, packet->not UDP\n", i);
+//           printk(KERN_INFO "rule %d not match: rule-UDP, packet->not UDP\n", i);
            continue;
 
          }
