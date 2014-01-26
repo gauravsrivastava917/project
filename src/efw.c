@@ -324,29 +324,31 @@ static int log_packet(struct efw_rule_char *rules)
 }
  */
 
-static void port_int_to_str(unsigned int port, char *port_str) {
+static void port_int_to_str(unsigned int port, char *port_str)
+{
   sprintf(port_str, "%u", port);
 }
 
-static unsigned int port_str_to_int(char *port_str) {
-	unsigned int port = 0;    
-	int i = 0;
-	if (port_str == NULL) {
-		return 0;
-	} 
+static unsigned int port_str_to_int(char *port_str)
+{
+  unsigned int port = 0;    
+  int i = 0;
 
-    while (port_str[i]!='\0') {
-	port = port*10 + (port_str[i]-'0');
-	i += 1;
-	}
+  if (port_str == NULL) {
+    return 0;
+  } 
 
-    return port;
+  while (port_str[i]!='\0') {
+    port = port*10 + (port_str[i]-'0');
+    i += 1;
+  }
+
+  return port;
 }
 
-
-
-static void ip_hl_to_str(unsigned int ip, char *ip_str) {
-    /*convert hl to byte array first*/
+static void ip_hl_to_str(unsigned int ip, char *ip_str)
+{
+  /*convert hl to byte array first*/
   unsigned char ip_array[4];
   memset(ip_array, 0, 4);
   ip_array[0] = (ip_array[0] | (ip >> 24));
@@ -366,10 +368,10 @@ static unsigned int ip_str_to_hl(char *ip_str)
  * e.g.: from "131.132.162.25" to [131][132][162][25]
  * */
 
-    unsigned char ip_array[4];
-    int i = 0;
-    unsigned int ip = 0;
-//dump_stack(); 
+  unsigned char ip_array[4];
+  int i = 0;
+  unsigned int ip = 0;
+//+dump_stack(); 
 
 // printk(KERN_INFO "ip str to hl : rec:- %s \n",ip_str);
   if (ip_str==NULL) {
@@ -411,24 +413,18 @@ static unsigned int ip_str_to_hl(char *ip_str)
  * only the first few bits (masked bits) are compared
  * */
 
- 
-
 static bool check_ip(unsigned int ip, unsigned int ip_rule, unsigned int mask) {
-    unsigned int tmp = ip;    //network to host long
-    int cmp_len = 32;
-    int i = 0, j = 0;
-    //printk(KERN_INFO "compare ip: %u <=> %u\n", tmp, ip_rule);
-    if (mask != 0) {
-       ////printk(KERN_INFO "deal with mask\n");
-       ////printk(KERN_INFO "mask: %d.%d.%d.%d\n", mask[0], mask[1], mask[2], mask[3]);
-       cmp_len = 0;
-       for (i = 0; i < 32; ++i) {
-      if (mask & (1 << (32-1-i)))
-         cmp_len++;
-      else
-         break;
-       }
-    }
+  unsigned int tmp = ip;    //network to host long
+  int cmp_len = 32;
+  int i = 0, j = 0;
+  //printk(KERN_INFO "compare ip: %u <=> %u\n", tmp, ip_rule);
+
+  if (mask != 0) {
+    cmp_len = 0; /* cannot move this out side */
+    for (i = 0; i < 32; ++i)
+      if (mask & (1 << (32-1-i))) cmp_len++; else break;
+
+  } //if(mask != 0)
 
     /*compare the two IP addresses for the first cmp_len bits*/
     for (i = 31, j = 0; j < cmp_len; --i, ++j) {
@@ -579,18 +575,21 @@ static void *efw_seq_next(struct seq_file *sfile, void *v, loff_t *pos){
         NULL;
 }
 /* for log_all file */
-static void *efw_seq_log_next(struct seq_file *sfile, void *v, loff_t *pos){
+static void *efw_seq_log_next(struct seq_file *sfile, void *v, loff_t *pos)
+{
   struct list_head *msghead = ((struct pkt_log_msgs *)v) -> list.next;
   (*pos) += 1;
   return (msghead != &(pkt_log->list))
     ?    list_entry(msghead, struct pkt_log_msgs, list)
     :    NULL;
 }
-static void efw_seq_stop(struct seq_file *sfile, void *v){
+static void efw_seq_stop(struct seq_file *sfile, void *v)
+{
 /* TODO: */
 }
 
-static int efw_seq_show(struct seq_file *sfile, void *v){
+static int efw_seq_show(struct seq_file *sfile, void *v)
+{
 /* TODO: */
   int ret;
   const struct efw_rule *trule = v;
@@ -627,13 +626,16 @@ static struct seq_operations efw_seq_write_ops = {
   .stop = efw_seq_stop,
   .show = efw_seq_show,
 };
-static int efw_proc_open(struct inode *inode, struct file *file){
+static int efw_proc_open(struct inode *inode, struct file *file)
+{
   return seq_open(file, &efw_seq_ops);
 }
-static int efw_proc_log_open(struct inode *inode, struct file *file){
+static int efw_proc_log_open(struct inode *inode, struct file *file)
+{
   return seq_open(file, &efw_seq_log_ops);
 }
-static int efw_proc_write_open(struct inode *inode, struct file *file){
+static int efw_proc_write_open(struct inode *inode, struct file *file)
+{
   return seq_open(file, &efw_seq_write_ops);
 }
 
@@ -688,10 +690,10 @@ static struct file_operations efw_proc_write_ops = {
 
 //the hook function itself: regsitered for filtering outgoing packets
 static unsigned int hook_func_out(unsigned int hooknum, 
-                           struct sk_buff *skb, 
-                           const struct net_device *in,
-                           const struct net_device *out,
-                           int (*okfn)(struct sk_buff *)) 
+                                  struct sk_buff *skb, 
+                                  const struct net_device *in,
+                                  const struct net_device *out,
+                                  int (*okfn)(struct sk_buff *)) 
 {
 /* declarations */
    struct iphdr  *ip_header; 
@@ -854,18 +856,7 @@ static unsigned int hook_func_in(unsigned int hooknum,
     a_rule = list_entry(p, struct efw_rule, list);
   rule_str = efw_rule_to_str(a_rule);
   printk(KERN_INFO "%s", rule_str);
-/*    printk(KERN_INFO "rule %d: a_rule->in_out = %u; a_rule->src_ip = %u; " \
-                     "a_rule->src_netmask=%u; a_rule->src_port=%u; "       \
-                     "a_rule->dst_ip=%u; a_rule->dst_netmask=%u; "         \
-                     "a_rule->dst_port=%u; a_rule->protocol=%u; "          \
-                     "a_rule->action=%u\n",
-                      i, a_rule->in_out, a_rule->src_ip, 
-                      a_rule->src_netmask, a_rule->src_port, 
-                      a_rule->dst_ip, a_rule->dst_netmask, 
-                      a_rule->dst_port, a_rule->protocol, 
-                      a_rule->action
-    ); //printf ends here. bad bad coding by the way!
-*/
+
 
   //if a rule doesn't specify as "in", skip it
   if (a_rule->in_out != IO_IN) {
@@ -1002,32 +993,36 @@ static int EFW_FILES_INITED[EFW_PROC_FILE_COUNT];
 int __init efw_init_module(void) {
   int i;
   struct proc_dir_entry *tmpde;
-    //printk(KERN_INFO "initialize kernel module\n");
-    INIT_LIST_HEAD(&(policy_list.list));
-    /* Fill in the hook structure for incoming packet hook*/
-    nfhops_in.hook = hook_func_in;
-    nfhops_in.hooknum = NF_INET_LOCAL_IN;
-    nfhops_in.pf = PF_INET;
-    nfhops_in.priority = NF_IP_PRI_FIRST;
-    nf_register_hook(&nfhops_in);         // Register the hook
-    /* Fill in the hook structure for outgoing packet hook*/
-    nfhops_out.hook = hook_func_out;
-    nfhops_out.hooknum = NF_INET_LOCAL_OUT;
-    nfhops_out.pf = PF_INET;
-    nfhops_out.priority = NF_IP_PRI_FIRST;
-    nf_register_hook(&nfhops_out);    // Register the hook
-/* PROC FS code */
+  struct file_operations *fops;
 
+  INIT_LIST_HEAD(&(policy_list.list));
+/* Fill in the hook structure for incoming packet hook*/
+  nfhops_in.hook = hook_func_in;
+  nfhops_in.hooknum = NF_INET_LOCAL_IN;
+  nfhops_in.pf = PF_INET;
+  nfhops_in.priority = NF_IP_PRI_FIRST;
+  nf_register_hook(&nfhops_in);         // Register the hook
+/* Fill in the hook structure for outgoing packet hook*/
+  nfhops_out.hook = hook_func_out;
+  nfhops_out.hooknum = NF_INET_LOCAL_OUT;
+  nfhops_out.pf = PF_INET;
+  nfhops_out.priority = NF_IP_PRI_FIRST;
+  nf_register_hook(&nfhops_out);    // Register the hook
+
+/* PROC FS code 
+ * creating entries in /proc and in /proc/efw 
+ */
   pfs_entry = proc_mkdir("efw", NULL);
   if(pfs_entry){
     for(i = 0; i < EFW_PROC_FILE_COUNT; i += 1){
-      if(i == 1){
-        tmpde = proc_create(FileNames[i], 0 /* what is mode? */, pfs_entry, &efw_proc_write_ops);
-      } else if(i == 2){
-        tmpde = proc_create(FileNames[i], 0 /* what is mode? */, pfs_entry, &efw_proc_log_ops);
+      if(i == 1){        /* FileNames[1] is write and we need different ops */
+        fops = &efw_proc_write_ops;
+      } else if(i == 2){ /* FileNames[2] is log_all and same reason as write */
+        fops = &efw_proc_log_ops;
       } else {
-        tmpde = proc_create(FileNames[i], 0 /* what is mode? */, pfs_entry, &efw_proc_ops);
+        fops = &efw_proc_ops;
       }
+      tmpde = proc_create(FileNames[i], 0, pfs_entry, fops);
       if(tmpde){
  
         /* TODO: error and other things */
@@ -1039,45 +1034,47 @@ int __init efw_init_module(void) {
 /* this is delibrate; for visibility */
         EFW_FILES_INITED[i] = 0;
       }
-    }
-  } else { //if pfs_entry i.e. /proc/efw was not created
+    } //for ends
+  } else { //if !pfs_entry i.e. /proc/efw was not created 
+    printk(KERN_ERR "Error: Failed to create directory entry in /proc.\n");
   }
-  /*this part of code is for testing purpose*/
 /* PROC FS code ends here */
 
-    add_a_test_rule();
-    return 0;
+/*this part of code is for testing purpose*/
+  add_a_test_rule();
+  return 0;
 }
 
 /* Cleanup routine */
 
 void __exit efw_cleanup_module(void) {
   int i = 0;
-    struct list_head *p, *q;
-    struct efw_rule *a_rule;
-    nf_unregister_hook(&nfhops_in);
-    nf_unregister_hook(&nfhops_out);
-    //printk(KERN_INFO "free policy list\n");
-    list_for_each_safe(p, q, &policy_list.list) {
-        //printk(KERN_INFO "free one\n");
-        a_rule = list_entry(p, struct efw_rule, list);
-        list_del(p);
-        kfree(a_rule);
-    }
+  struct list_head *p, *q;
+  struct efw_rule *a_rule;
+  nf_unregister_hook(&nfhops_in);
+  nf_unregister_hook(&nfhops_out);
+
+/* deleting rules in the policy */
+  list_for_each_safe(p, q, &policy_list.list) {
+    a_rule = list_entry(p, struct efw_rule, list);
+    list_del(p);
+    kfree(a_rule);
+  }
+
+/* deleting /proc/efw/entries */
   for(i = 0; i < EFW_PROC_FILE_COUNT; i += 1){
     if(EFW_FILES_INITED[i]){
-      proc_remove(pfs_rule_files[i]);
-/* TODO: automaticize it:    proc_remove(pfs_rule_files[i]); */
-//      remove_proc_entry(FileNames[i], pfs_entry);
+      proc_remove(pfs_rule_files[i]); /* OR (for older kernels)
+      remove_proc_entry(FileNames[i], pfs_entry); */
     }
   }
-  proc_remove(pfs_entry);
-/* TODO: automaticize it:  proc_remove(pfs_entry); */
-//  remove_proc_entry(pfs_entry->name, NULL);
-  //printk(KERN_INFO "kernel module unloaded.\n");
+
+/* deleting /proc/efw entry */
+  proc_remove(pfs_entry); /* OR (for older kernels)
+  remove_proc_entry(pfs_entry->name, NULL); */
+
+  printk(KERN_INFO "Embedded FireWall EFW module unloaded.\n");
 }
 
 module_init(efw_init_module);
 module_exit(efw_cleanup_module);
-
-
