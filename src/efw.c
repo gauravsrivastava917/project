@@ -65,6 +65,9 @@
 #include <linux/seq_file.h>
 #include <linux/moduleparam.h>
 
+#include "efw_common_header.h"
+#include "efw_header.h"
+
 MODULE_LICENSE("GPL");
 MODULE_DESCRIPTION("Embedded-Linux-Kernel-FireWall");
 #define AUTHORS "Anubhav Saini<IAmAnubhavSaini@GMail.com>, " \
@@ -100,51 +103,14 @@ static struct proc_dir_entry *pfs_entry;
 
 #define RULE_LENGTH 80
 
-#define EFW_PROC_FILE_COUNT 5
-/* pfs_rule_files [N] where N:
- * ***************************
- * N = 0 : read only rules file
- * N = 1 : write only rules file
- * N = 2 : log all file
- * N = 3 : match log file
- * N = 4 : non_match log file
- */
-static struct proc_dir_entry *pfs_rule_files[EFW_PROC_FILE_COUNT];
 
 /* pfs_wrt_spn_lck - write spin lock for pfs_rwe[1] */
 DEFINE_SPINLOCK(pfs_wrt_spn_lck);
 
-static char *FileNames[] = {
-  "read", "write", "log_all", "match", "non_match"
-};
+
 
 #define RULE_FORMAT "s %s:%s/%s d %s:%s/%s p %s a %s"
 
-enum Protocols{
-  PRT_INVALID  = -1,
-  PRT_ALL      = 1,
-  PRT_TCP      = 6,
-  PRT_UDP      = 17,
-};
-enum InOut{
-  IO_NEITHER   = 0,
-  IO_IN        = 1,
-  IO_OUT       = 2,
-};
-enum Actions{
-  ACT_BLOCK      = 0,
-  ACT_UNBLOCK    = 1,
-  ACT_ACCEPT     = 1,
-};
-/* I know that I could have left 0,1 .. out in InOut and Action, these
- * are explicit so that the rules stay visible
- */
-enum LogMode{
-  LM_MINIMAL,
-  LM_MATCH,
-  LM_UNMATCH,
-  LM_ALL
-};
 /* structure for logging packets */
 //static int log_pkt_count __initconst = 0 ;
 struct pkt_log_msgs{
@@ -159,34 +125,7 @@ static struct pkt_log_msgs *pkt_log;
 static struct nf_hook_ops nfhops_in;
 static struct nf_hook_ops nfhops_out;
 
-/*structure for firewall policies*/ 
-struct efw_rule_char {
-  char *in_out;
-  char *src_ip;
-  char *src_netmask;
-  char *src_port;
-  char *dst_ip;
-  char *dst_netmask;
-  char *dst_port;
-  char *protocol;
-  char *action;
-};
 
- 
-
-/*structure for firewall policies*/
-struct efw_rule {
-  unsigned char in_out;        //0: neither in nor out, 1: in, 2: out
-  unsigned int src_ip;        //
-  unsigned int src_netmask;        //
-  unsigned int src_port;        //0~2^32
-  unsigned int dst_ip;
-  unsigned int dst_netmask;
-  unsigned int dst_port;
-  int protocol; /* enum Protocols */       //0: all, 1: tcp, 2: udp
-  int action; /* enum Action */
-  struct list_head list;
-};
 
 #define get_rule(name) container_of(name, struct efw_rule, list) 
 
@@ -1037,7 +976,7 @@ static void add_a_test_rule(void) {
 }
 
 
-static int EFW_FILES_INITED[EFW_PROC_FILE_COUNT];
+
 
 /* Initialization routine */
 int __init efw_init_module(void)
